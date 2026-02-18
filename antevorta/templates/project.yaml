@@ -1,0 +1,26 @@
+name: {{PROJECT_NAME}}
+crs: "EPSG:3857"
+
+grid:
+  cell_size_m: 250
+
+time:
+  window_days: 365
+  freq: "D"
+
+aoi:
+  source: "projects/{{PROJECT_NAME}}/aoi.geojson"
+  id: "{{PROJECT_NAME}}_aoi"
+
+events:
+  source: "projects/{{PROJECT_NAME}}/events.geojson"
+  format: "geojson"
+  time_field: "event_time"
+  geometry: {}
+
+factors:
+  - name: canopy
+    source: "projects/{{PROJECT_NAME}}/canopy.geojson"
+    format: "geojson"
+    geometry_type: "polygon"
+    agg: "coverage_pct"

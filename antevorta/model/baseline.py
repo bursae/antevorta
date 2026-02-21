@@ -6,6 +6,7 @@ from dataclasses import dataclass
 import joblib
 import numpy as np
 import pandas as pd
+import geopandas as gpd
 from sklearn.dummy import DummyClassifier
 from sklearn.linear_model import LogisticRegression
 from sklearn.metrics import precision_score, recall_score, roc_auc_score
@@ -136,4 +137,10 @@ def predict_risk(cfg: dict, as_of_date: str | None = None) -> pd.DataFrame:
 
     out_path = paths.outputs / f"risk_surface_{forecast_date}.parquet"
     out.to_parquet(out_path, index=False)
+
+    grid = gpd.read_parquet(paths.processed / "grid.parquet")[["grid_id", "geometry"]]
+    risk_grid = grid.merge(out, on="grid_id", how="left")
+    risk_grid["forecast_date"] = pd.to_datetime(risk_grid["forecast_date"]).dt.strftime("%Y-%m-%d")
+    geojson_path = paths.outputs / f"risk_surface_{forecast_date}.geojson"
+    geojson_path.write_text(risk_grid.to_json(), encoding="utf-8")
     return out

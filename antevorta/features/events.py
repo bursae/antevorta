@@ -4,7 +4,6 @@ import geopandas as gpd
 import pandas as pd
 
 
-
 def build_events_grid_daily(grid: gpd.GeoDataFrame, events: gpd.GeoDataFrame, window_days: int) -> pd.DataFrame:
     events = events.copy()
     events["date"] = pd.to_datetime(events["event_time"]).dt.floor("D").dt.tz_localize(None)

@@ -1,7 +1,5 @@
 from __future__ import annotations
 
-from pathlib import Path
-
 import geopandas as gpd
 import pandas as pd
 from shapely.geometry import Point
@@ -62,7 +60,3 @@ def ensure_crs(gdf: gpd.GeoDataFrame, target_crs: str) -> gpd.GeoDataFrame:
     if gdf.crs is None:
         gdf = gdf.set_crs("EPSG:4326")
     return gdf.to_crs(target_crs)
-
-
-def read_processed(path: Path) -> gpd.GeoDataFrame:
-    return gpd.read_parquet(path)

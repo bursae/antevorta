@@ -4,7 +4,6 @@ import geopandas as gpd
 import pandas as pd
 
 
-
 def _grid_base(grid: gpd.GeoDataFrame) -> gpd.GeoDataFrame:
     base = grid[["grid_id", "geometry"]].copy()
     base["cell_area"] = base.geometry.area

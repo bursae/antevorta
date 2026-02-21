@@ -1,0 +1,26 @@
+name: dc_demo
+crs: "EPSG:3857"
+
+grid:
+  cell_size_m: 250
+
+time:
+  window_days: 365
+  freq: "D"
+
+aoi:
+  source: "projects/dc_demo/aoi.geojson"
+  id: "dc_demo_aoi"
+
+events:
+  source: "projects/dc_demo/events.geojson"
+  format: "geojson"
+  time_field: "event_time"
+  geometry: {}
+
+factors:
+  - name: canopy
+    source: "projects/dc_demo/canopy.geojson"
+    format: "geojson"
+    geometry_type: "polygon"
+    agg: "coverage_pct"

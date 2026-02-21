@@ -1,0 +1,19 @@
+{
+  "type": "FeatureCollection",
+  "features": [
+    {
+      "type": "Feature",
+      "properties": {"aoi_id": "dc_demo_aoi"},
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [[
+          [-77.04, 38.90],
+          [-77.04, 38.91],
+          [-77.02, 38.91],
+          [-77.02, 38.90],
+          [-77.04, 38.90]
+        ]]
+      }
+    }
+  ]
+}

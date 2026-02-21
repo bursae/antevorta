@@ -1,0 +1,33 @@
+{
+  "type": "FeatureCollection",
+  "features": [
+    {
+      "type": "Feature",
+      "properties": {"class": "tree_canopy"},
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [[
+          [-77.038, 38.901],
+          [-77.038, 38.909],
+          [-77.029, 38.909],
+          [-77.029, 38.901],
+          [-77.038, 38.901]
+        ]]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {"class": "tree_canopy"},
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [[
+          [-77.028, 38.902],
+          [-77.028, 38.910],
+          [-77.022, 38.910],
+          [-77.022, 38.902],
+          [-77.028, 38.902]
+        ]]
+      }
+    }
+  ]
+}

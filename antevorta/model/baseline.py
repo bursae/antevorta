@@ -6,6 +6,7 @@ from dataclasses import dataclass
 import joblib
 import numpy as np
 import pandas as pd
+from sklearn.dummy import DummyClassifier
 from sklearn.linear_model import LogisticRegression
 from sklearn.metrics import precision_score, recall_score, roc_auc_score
 from sklearn.pipeline import Pipeline
@@ -23,6 +24,18 @@ class TrainResult:
 def _feature_columns(table: pd.DataFrame) -> list[str]:
     drop_cols = {"grid_id", "date", "target_next_day"}
     return [c for c in table.columns if c not in drop_cols]
+
+
+def _positive_class_proba(model, X: pd.DataFrame) -> np.ndarray:
+    proba = model.predict_proba(X)
+    classes = getattr(model, "classes_", None)
+    if classes is None:
+        return np.zeros(len(X), dtype=float)
+    classes = np.asarray(classes)
+    if 1 in classes:
+        idx = int(np.where(classes == 1)[0][0])
+        return proba[:, idx]
+    return np.zeros(len(X), dtype=float)
 
 
 def train_baseline(cfg: dict, test_days: int = 30) -> TrainResult:
@@ -46,20 +59,25 @@ def train_baseline(cfg: dict, test_days: int = 30) -> TrainResult:
     X_test = test_df[feature_cols].fillna(0)
     y_test = test_df["target_next_day"].astype(int)
 
-    model = Pipeline(
-        steps=[
-            ("scaler", StandardScaler()),
-            ("clf", LogisticRegression(max_iter=1000, class_weight="balanced")),
-        ]
-    )
+    if y_train.nunique() < 2:
+        model = DummyClassifier(strategy="most_frequent")
+        model_name = "dummy_most_frequent"
+    else:
+        model = Pipeline(
+            steps=[
+                ("scaler", StandardScaler()),
+                ("clf", LogisticRegression(max_iter=1000, class_weight="balanced")),
+            ]
+        )
+        model_name = "logistic_regression"
     model.fit(X_train, y_train)
 
-    proba = model.predict_proba(X_test)[:, 1]
+    proba = _positive_class_proba(model, X_test)
     pred = (proba >= 0.5).astype(int)
 
     metrics = {
         "project": cfg["name"],
-        "model": "logistic_regression",
+        "model": model_name,
         "train_rows": int(len(train_df)),
         "test_rows": int(len(test_df)),
         "test_period_start": str(test_df["date"].min().date()),
@@ -101,7 +119,7 @@ def predict_risk(cfg: dict, as_of_date: str | None = None) -> pd.DataFrame:
     if latest.empty:
         raise ValueError(f"No rows found for prediction date: {as_of.date()}")
 
-    latest["risk_score"] = model.predict_proba(latest[feature_cols].fillna(0))[:, 1]
+    latest["risk_score"] = _positive_class_proba(model, latest[feature_cols].fillna(0))
     latest = latest.sort_values("risk_score", ascending=False).reset_index(drop=True)
     latest["risk_rank"] = np.arange(1, len(latest) + 1)
 

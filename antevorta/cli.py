@@ -13,6 +13,13 @@ def _load_cfg(project_yaml: str) -> dict:
     return cfg
 
 
+def _resolve_test_days(args: argparse.Namespace, cfg: dict) -> int:
+    if args.test_days is not None:
+        return int(args.test_days)
+    model_cfg = cfg.get("model", {})
+    return int(model_cfg.get("test_days", 30))
+
+
 def cmd_project_init(args: argparse.Namespace) -> None:
     from antevorta.core.storage import ProjectPaths, ensure_project_dirs
 
@@ -80,7 +87,8 @@ def cmd_model_train(args: argparse.Namespace) -> None:
     from antevorta.model.baseline import train_baseline
 
     cfg = _load_cfg(args.project)
-    train_baseline(cfg, test_days=args.test_days)
+    test_days = _resolve_test_days(args, cfg)
+    train_baseline(cfg, test_days=test_days)
     print("Wrote data/<project>/models/model.pkl and reports/metrics.json")
 
 
@@ -104,6 +112,7 @@ def cmd_run(args: argparse.Namespace) -> None:
     from antevorta.model.baseline import predict_risk, train_baseline
 
     cfg = _load_cfg(args.project)
+    test_days = _resolve_test_days(args, cfg)
 
     collect_aoi(cfg)
     collect_events(cfg)
@@ -115,7 +124,7 @@ def cmd_run(args: argparse.Namespace) -> None:
     grid.to_parquet(paths.processed / "grid.parquet")
 
     build_dataset(cfg)
-    train_baseline(cfg, test_days=args.test_days)
+    train_baseline(cfg, test_days=test_days)
     predict_risk(cfg, as_of_date=args.date)
     print("Run complete.")
 
@@ -158,7 +167,7 @@ def build_parser() -> argparse.ArgumentParser:
 
     p_train = p_model_sub.add_parser("train")
     p_train.add_argument("--project", required=True)
-    p_train.add_argument("--test-days", type=int, default=30)
+    p_train.add_argument("--test-days", type=int)
     p_train.set_defaults(func=cmd_model_train)
 
     p_predict = p_model_sub.add_parser("predict")
@@ -168,7 +177,7 @@ def build_parser() -> argparse.ArgumentParser:
 
     p_run = sub.add_parser("run")
     p_run.add_argument("--project", required=True)
-    p_run.add_argument("--test-days", type=int, default=30)
+    p_run.add_argument("--test-days", type=int)
     p_run.add_argument("--date")
     p_run.set_defaults(func=cmd_run)
 

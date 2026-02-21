@@ -8,6 +8,9 @@ time:
   window_days: 365
   freq: "D"
 
+model:
+  test_days: 2
+
 aoi:
   source: "projects/dc_demo/aoi.geojson"
   id: "dc_demo_aoi"

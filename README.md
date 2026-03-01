@@ -29,12 +29,12 @@ antevorta validate --kfold 5
 cd /Users/anthonybursae/Documents/GitHub/antevorta
 source .venv/bin/activate
 
-python -m antevorta.cli init --aoi projects/dc_demo/aoi.geojson
-python -m antevorta.cli add-events projects/dc_demo/events.geojson --time-field event_time
-python -m antevorta.cli add-factor projects/dc_demo/canopy.geojson --type distance
-python -m antevorta.cli build-grid --resolution 100
-python -m antevorta.cli assess
-python -m antevorta.cli validate --kfold 3
+python -m antevorta init --aoi projects/dc_demo/aoi.geojson
+python -m antevorta add-events projects/dc_demo/events.geojson --time-field event_time
+python -m antevorta add-factor projects/dc_demo/canopy.geojson --type distance
+python -m antevorta build-grid --resolution 100
+python -m antevorta assess
+python -m antevorta validate --kfold 3
 ```
 
 ## Inputs

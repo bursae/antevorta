@@ -28,7 +28,6 @@ def validate_model(data: TrainingData, kfold: int, seed: int = CONFIG.seed) -> d
             raise ValueError("Each fold must contain both classes; adjust kfold or data")
 
         model = LogisticRegression(
-            penalty="l2",
             solver="lbfgs",
             random_state=seed,
             max_iter=1000,

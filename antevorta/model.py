@@ -70,7 +70,6 @@ def train_logistic_regression(data: TrainingData, seed: int = CONFIG.seed) -> Fi
         raise ValueError("Training labels must include both event and background classes")
 
     estimator = LogisticRegression(
-        penalty="l2",
         solver="lbfgs",
         random_state=seed,
         max_iter=1000,

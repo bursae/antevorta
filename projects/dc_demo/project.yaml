@@ -2,7 +2,7 @@ name: dc_demo
 crs: "EPSG:3857"
 
 grid:
-  cell_size_m: 250
+  cell_size_m: 100
 
 time:
   window_days: 365

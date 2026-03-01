@@ -1,190 +1,133 @@
 from __future__ import annotations
 
 import argparse
+import logging
 from pathlib import Path
 
-
-def _load_cfg(project_yaml: str) -> dict:
-    from antevorta.core.config import load_project_config
-    from antevorta.core.storage import ProjectPaths, ensure_project_dirs
-
-    cfg = load_project_config(project_yaml)
-    ensure_project_dirs(ProjectPaths(cfg["name"]))
-    return cfg
-
-
-def _resolve_test_days(args: argparse.Namespace, cfg: dict) -> int:
-    if args.test_days is not None:
-        return int(args.test_days)
-    model_cfg = cfg.get("model", {})
-    return int(model_cfg.get("test_days", 30))
+from antevorta.events import add_events, load_events_geodataframe
+from antevorta.export import export_assessment
+from antevorta.factors import add_factor, load_factors
+from antevorta.grid import build_grid, load_grid
+from antevorta.model import build_training_data, factor_weights, predict_likelihood, train_logistic_regression
+from antevorta.project import ProjectState, initialize_project, load_manifest
+from antevorta.validation import validate_model
 
 
-def cmd_project_init(args: argparse.Namespace) -> None:
-    from antevorta.core.storage import ProjectPaths, ensure_project_dirs
-
-    name = args.name
-    project_dir = Path("projects") / name
-    project_dir.mkdir(parents=True, exist_ok=True)
-    (project_dir / "sources").mkdir(parents=True, exist_ok=True)
-
-    template_path = Path(__file__).parent / "templates" / "project.yaml"
-    template = template_path.read_text(encoding="utf-8")
-    template = template.replace("{{PROJECT_NAME}}", name)
-    (project_dir / "project.yaml").write_text(template, encoding="utf-8")
-
-    ensure_project_dirs(ProjectPaths(name))
-    print(f"Initialized project at {project_dir / 'project.yaml'}")
+def configure_logging() -> None:
+    logging.basicConfig(level=logging.INFO, format="%(levelname)s %(message)s")
 
 
-def cmd_collect_aoi(args: argparse.Namespace) -> None:
-    from antevorta.ingest.aoi import collect_aoi
-
-    cfg = _load_cfg(args.project)
-    collect_aoi(cfg)
-    print("Wrote data/<project>/processed/aoi.parquet")
-
-
-def cmd_collect_events(args: argparse.Namespace) -> None:
-    from antevorta.ingest.events import collect_events
-
-    cfg = _load_cfg(args.project)
-    collect_events(cfg)
-    print("Wrote data/<project>/processed/events.parquet")
+def _require_file(path: str) -> Path:
+    file_path = Path(path)
+    if not file_path.exists() or not file_path.is_file():
+        raise FileNotFoundError(f"File not found: {file_path}")
+    return file_path
 
 
-def cmd_collect_factors(args: argparse.Namespace) -> None:
-    from antevorta.ingest.factors import collect_factors
-
-    cfg = _load_cfg(args.project)
-    collect_factors(cfg)
-    print("Wrote data/<project>/processed/factors/*.parquet")
-
-
-def cmd_grid_build(args: argparse.Namespace) -> None:
-    import geopandas as gpd
-    from antevorta.core.grid import build_grid
-    from antevorta.core.storage import ProjectPaths
-
-    cfg = _load_cfg(args.project)
-    paths = ProjectPaths(cfg["name"])
-
-    aoi = gpd.read_parquet(paths.processed / "aoi.parquet")
-    grid = build_grid(aoi, float(cfg["grid"]["cell_size_m"]), cfg["name"])
-    grid.to_parquet(paths.processed / "grid.parquet")
-    print("Wrote data/<project>/processed/grid.parquet")
+def cmd_init(args: argparse.Namespace) -> None:
+    aoi = _require_file(args.aoi)
+    if aoi.suffix.lower() != ".geojson":
+        raise ValueError("AOI must be a GeoJSON file")
+    initialize_project(aoi.resolve())
+    logging.info("Initialized project with AOI: %s", aoi)
 
 
-def cmd_dataset_build(args: argparse.Namespace) -> None:
-    from antevorta.features.dataset import build_dataset
-
-    cfg = _load_cfg(args.project)
-    build_dataset(cfg)
-    print("Wrote data/<project>/processed/model_table.parquet")
-
-
-def cmd_model_train(args: argparse.Namespace) -> None:
-    from antevorta.model.baseline import train_baseline
-
-    cfg = _load_cfg(args.project)
-    test_days = _resolve_test_days(args, cfg)
-    train_baseline(cfg, test_days=test_days)
-    print("Wrote data/<project>/models/model.pkl and reports/metrics.json")
+def cmd_add_events(args: argparse.Namespace) -> None:
+    state = ProjectState.from_cwd()
+    stored = add_events(
+        state,
+        _require_file(args.events).resolve(),
+        time_field=str(args.time_field),
+    )
+    logging.info("Stored events: %s", stored)
 
 
-def cmd_model_predict(args: argparse.Namespace) -> None:
-    from antevorta.model.baseline import predict_risk
-
-    cfg = _load_cfg(args.project)
-    out = predict_risk(cfg, as_of_date=args.date)
-    forecast_date = out["forecast_date"].iloc[0].date()
-    print(f"Wrote data/<project>/outputs/risk_surface_{forecast_date}.parquet")
+def cmd_add_factor(args: argparse.Namespace) -> None:
+    state = ProjectState.from_cwd()
+    factor = add_factor(state, _require_file(args.factor).resolve(), args.type)
+    logging.info("Registered factor: %s (%s)", factor["name"], factor["source"])
 
 
-def cmd_run(args: argparse.Namespace) -> None:
-    import geopandas as gpd
-    from antevorta.core.grid import build_grid
-    from antevorta.core.storage import ProjectPaths
-    from antevorta.features.dataset import build_dataset
-    from antevorta.ingest.aoi import collect_aoi
-    from antevorta.ingest.events import collect_events
-    from antevorta.ingest.factors import collect_factors
-    from antevorta.model.baseline import predict_risk, train_baseline
+def cmd_build_grid(args: argparse.Namespace) -> None:
+    state = ProjectState.from_cwd()
+    path = build_grid(state, float(args.resolution))
+    logging.info("Built grid: %s", path)
 
-    cfg = _load_cfg(args.project)
-    test_days = _resolve_test_days(args, cfg)
 
-    collect_aoi(cfg)
-    collect_events(cfg)
-    collect_factors(cfg)
+def _prepare_assessment_inputs(state: ProjectState):
+    manifest = load_manifest(state)
+    events_path = manifest.get("events_path")
+    if not isinstance(events_path, str):
+        raise ValueError("Events missing. Run: antevorta add-events <events-file>")
 
-    paths = ProjectPaths(cfg["name"])
-    aoi = gpd.read_parquet(paths.processed / "aoi.parquet")
-    grid = build_grid(aoi, float(cfg["grid"]["cell_size_m"]), cfg["name"])
-    grid.to_parquet(paths.processed / "grid.parquet")
+    events = load_events_geodataframe(Path(events_path))
+    grid = load_grid(state)
+    factors = load_factors(state)
+    return events, grid, factors
 
-    build_dataset(cfg)
-    train_baseline(cfg, test_days=test_days)
-    predict_risk(cfg, as_of_date=args.date)
-    print("Run complete.")
+
+def cmd_assess(_: argparse.Namespace) -> None:
+    state = ProjectState.from_cwd()
+    events, grid, factors = _prepare_assessment_inputs(state)
+
+    data = build_training_data(events, grid, factors)
+    fitted = train_logistic_regression(data)
+    ranked = predict_likelihood(fitted, grid, factors)
+    weights = factor_weights(fitted)
+
+    outputs = export_assessment(grid, ranked, weights, Path.cwd())
+    logging.info("Wrote likelihood surface: %s", outputs["likelihood_grid"])
+    logging.info("Wrote ranked grid: %s", outputs["ranked_grid"])
+    logging.info("Wrote factor weights: %s", outputs["factor_weights"])
+
+
+def cmd_validate(args: argparse.Namespace) -> None:
+    state = ProjectState.from_cwd()
+    events, grid, factors = _prepare_assessment_inputs(state)
+    data = build_training_data(events, grid, factors)
+    metrics = validate_model(data, int(args.kfold))
+    logging.info(
+        "Cross-validation complete: k=%d auc_mean=%.6f auc_std=%.6f",
+        int(metrics["kfold"]),
+        metrics["auc_mean"],
+        metrics["auc_std"],
+    )
 
 
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="antevorta")
     sub = parser.add_subparsers(dest="command", required=True)
 
-    p_project = sub.add_parser("project")
-    p_project_sub = p_project.add_subparsers(dest="project_cmd", required=True)
-    p_init = p_project_sub.add_parser("init")
-    p_init.add_argument("--name", required=True)
-    p_init.set_defaults(func=cmd_project_init)
+    p_init = sub.add_parser("init")
+    p_init.add_argument("--aoi", required=True)
+    p_init.set_defaults(func=cmd_init)
 
-    p_collect = sub.add_parser("collect")
-    p_collect_sub = p_collect.add_subparsers(dest="collect_cmd", required=True)
-    for name, func in [
-        ("aoi", cmd_collect_aoi),
-        ("events", cmd_collect_events),
-        ("factors", cmd_collect_factors),
-    ]:
-        p = p_collect_sub.add_parser(name)
-        p.add_argument("--project", required=True)
-        p.set_defaults(func=func)
+    p_events = sub.add_parser("add-events")
+    p_events.add_argument("events")
+    p_events.add_argument("--time-field", default="timestamp")
+    p_events.set_defaults(func=cmd_add_events)
 
-    p_grid = sub.add_parser("grid")
-    p_grid_sub = p_grid.add_subparsers(dest="grid_cmd", required=True)
-    p_grid_build = p_grid_sub.add_parser("build")
-    p_grid_build.add_argument("--project", required=True)
-    p_grid_build.set_defaults(func=cmd_grid_build)
+    p_factor = sub.add_parser("add-factor")
+    p_factor.add_argument("factor")
+    p_factor.add_argument("--type", required=True, choices=["distance"])
+    p_factor.set_defaults(func=cmd_add_factor)
 
-    p_dataset = sub.add_parser("dataset")
-    p_dataset_sub = p_dataset.add_subparsers(dest="dataset_cmd", required=True)
-    p_dataset_build = p_dataset_sub.add_parser("build")
-    p_dataset_build.add_argument("--project", required=True)
-    p_dataset_build.set_defaults(func=cmd_dataset_build)
+    p_grid = sub.add_parser("build-grid")
+    p_grid.add_argument("--resolution", required=True, type=float)
+    p_grid.set_defaults(func=cmd_build_grid)
 
-    p_model = sub.add_parser("model")
-    p_model_sub = p_model.add_subparsers(dest="model_cmd", required=True)
+    p_assess = sub.add_parser("assess")
+    p_assess.set_defaults(func=cmd_assess)
 
-    p_train = p_model_sub.add_parser("train")
-    p_train.add_argument("--project", required=True)
-    p_train.add_argument("--test-days", type=int)
-    p_train.set_defaults(func=cmd_model_train)
-
-    p_predict = p_model_sub.add_parser("predict")
-    p_predict.add_argument("--project", required=True)
-    p_predict.add_argument("--date")
-    p_predict.set_defaults(func=cmd_model_predict)
-
-    p_run = sub.add_parser("run")
-    p_run.add_argument("--project", required=True)
-    p_run.add_argument("--test-days", type=int)
-    p_run.add_argument("--date")
-    p_run.set_defaults(func=cmd_run)
+    p_validate = sub.add_parser("validate")
+    p_validate.add_argument("--kfold", required=True, type=int)
+    p_validate.set_defaults(func=cmd_validate)
 
     return parser
 
 
 def main() -> None:
+    configure_logging()
     parser = build_parser()
     args = parser.parse_args()
     args.func(args)

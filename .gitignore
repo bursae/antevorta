@@ -4,6 +4,7 @@ __pycache__/
 *.py[cod]
 *.egg-info/
 .pytest_cache/
+.antevorta/
 
 # Local data artifacts
 data/*/raw/
@@ -12,3 +13,8 @@ data/*/outputs/
 data/*/models/
 data/*/reports/
 data/*/metadata/
+
+# CLI runtime outputs
+factor_weights.csv
+ranked_grid.csv
+likelihood_grid.geojson
